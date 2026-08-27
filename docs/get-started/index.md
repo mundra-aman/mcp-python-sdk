@@ -3,7 +3,7 @@
 New to MCP, or new to this SDK? Start here. These pages take you from nothing to a
 working, tested server: [install the SDK](installation.md), build your
 [first server](first-steps.md), [connect it to a real host](real-host.md), and
-[test it](testing.md) with an in-memory client.
+[test it](code/aaif/mcp-python-sdk/docs/get-started/testing.md) with an in-memory client.
 
 ## Run the code
 
@@ -39,7 +39,7 @@ No subprocess, no port, no transport. `Client(mcp)` connects to the server objec
 
 If a change to the SDK breaks an example on one of these pages, CI goes red before the page does. The code you read here is the code that runs.
 
-You'll use this yourself in [Testing](testing.md); it's how you test your own servers, too.
+You'll use this yourself in [Testing](code/aaif/mcp-python-sdk/docs/get-started/testing.md); it's how you test your own servers, too.
 
 ## Where to go next
 
