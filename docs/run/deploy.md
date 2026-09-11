@@ -159,7 +159,7 @@ An `MCPServer` is a protocol implementation, not an application server. The depl
 
 * **No `workers=`.** `mcp.run("streamable-http")` starts exactly one uvicorn process, and that is all it will ever start. Multi-process is `streamable_http_app()` handed to whatever you already deploy ASGI with: `uvicorn --workers`, gunicorn, your platform's process manager. This page is deliberately not a tutorial for any of them; their documentation is better than a copy of it here would be.
 * **No health-check route.** `@mcp.custom_route("/health", methods=["GET"])` is the whole answer, and it is never authenticated even when the rest of the server is. That is right for a liveness probe, wrong for anything private. **[Add to an existing app](asgi.md#custom-routes)** shows one.
-* **No production settings object.** There is nowhere on `MCPServer` to write down timeouts, TLS, graceful shutdown, or connection limits, because none of those are its job. They belong to your ASGI server, and you configure them there. **[Running your server](index.md)** covers the handful of settings the constructor *does* take.
+* **No production settings object.** There is nowhere on `MCPServer` to write down timeouts, TLS, graceful shutdown, or connection limits, because none of those are its job. They belong to your ASGI server, and you configure them there. **[Running your server](code/aaif/mcp-python-sdk/docs/run/index.md)** covers the handful of settings the constructor *does* take.
 * **No shipped `EventStore`, and on 2026-07-28 no use for one.** Resumability is a feature of the legacy stateful leg; a modern exchange is one POST, one response, and nothing to resume.
 
 ## Recap

@@ -38,7 +38,7 @@ The SDK has no opinion about what a valid token looks like. You tell it, by impl
 
 ## What you get over HTTP
 
-Authorization lives in HTTP headers, so it exists only on the HTTP transports. Run it on the one you deploy: `mcp.run(transport="streamable-http")` puts it on `http://127.0.0.1:8000/mcp`, and **[Running your server](index.md)** has the rest. The app now has two routes:
+Authorization lives in HTTP headers, so it exists only on the HTTP transports. Run it on the one you deploy: `mcp.run(transport="streamable-http")` puts it on `http://127.0.0.1:8000/mcp`, and **[Running your server](code/aaif/mcp-python-sdk/docs/run/index.md)** has the rest. The app now has two routes:
 
 ```text
 /mcp
