@@ -113,7 +113,7 @@ Notice what isn't there. `completions` (argument autocomplete for resource templ
 !!! info
     That `client.py` is a complete MCP client, and **[The Client](../client/index.md)** is its page.
     In a test you skip the terminal and the port and hand `Client` the server object itself,
-    `Client(mcp)`. That gets a whole page too: **[Testing](code/aaif/mcp-python-sdk/docs/get-started/testing.md)**.
+    `Client(mcp)`. That gets a whole page too: **[Testing](testing.md)**.
 
 ## What you did not write
 
@@ -135,4 +135,4 @@ That ratio is the whole point of the SDK.
 * The server's **capabilities** are declared for you, and a client only asks for what a server declares.
 * `Client("http://localhost:8000/mcp")` talks to your running server. Hand it the server object instead, `Client(mcp)`, and it is your test harness from day one.
 
-Next up is **[Connect to a real host](real-host.md)**: this server inside Claude Desktop or an IDE, for real. Then **[Testing](code/aaif/mcp-python-sdk/docs/get-started/testing.md)**: one page, one in-memory client, and you're never guessing whether it works. After that, each primitive gets its own page, starting with the one the model drives: **[Tools](../servers/tools.md)**.
+Next up is **[Connect to a real host](real-host.md)**: this server inside Claude Desktop or an IDE, for real. Then **[Testing](testing.md)**: one page, one in-memory client, and you're never guessing whether it works. After that, each primitive gets its own page, starting with the one the model drives: **[Tools](../servers/tools.md)**.
