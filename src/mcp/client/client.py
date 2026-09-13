@@ -58,6 +58,7 @@ from mcp.client.session import (
     MessageHandlerFnT,
     SamplingFnT,
 )
+from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.client.subscriptions import ServerEvent, Subscription
 from mcp.client.subscriptions import listen as _listen
@@ -261,34 +262,31 @@ def _fold_extensions(extensions: Sequence[ClientExtension] | None) -> _FoldedExt
 class Client:
     """A high-level MCP client for connecting to MCP servers.
 
-    Supports in-memory transport for testing (pass a Server or MCPServer instance),
-    Streamable HTTP transport (pass a URL string), or a custom Transport instance.
+    Pass a URL string (Streamable HTTP), a `StdioServerParameters` (launch the command as a
+    subprocess and talk over its stdin/stdout), any `Transport`, or - in tests - a `Server` or
+    `MCPServer` instance to connect to it in-process.
 
     Example:
         ```python
-        from mcp.client import Client
-        from mcp.server.mcpserver import MCPServer
+        import asyncio
 
-        server = MCPServer("test")
-
-        @server.tool()
-        def add(a: int, b: int) -> int:
-            return a + b
+        from mcp import Client
 
         async def main():
-            async with Client(server) as client:
+            async with Client("http://localhost:8000/mcp") as client:
                 result = await client.call_tool("add", {"a": 1, "b": 2})
 
         asyncio.run(main())
         ```
     """
 
-    server: Server[Any] | MCPServer | Transport | str
+    server: Server[Any] | MCPServer | Transport | StdioServerParameters | str
     """The MCP server to connect to.
 
-    If the server is a `Server` or `MCPServer` instance, it will be connected in-process.
     If the server is a URL string, it will be used as the URL for a `streamable_http_client` transport.
+    If the server is a `StdioServerParameters`, the command is launched with `stdio_client`.
     If the server is a `Transport` instance, it will be used directly.
+    If the server is a `Server` or `MCPServer` instance, it will be connected in-process.
     """
 
     _: KW_ONLY
@@ -394,6 +392,8 @@ class Client:
             self._connect = _connect_inproc(srv)
         elif isinstance(srv, str):
             self._connect = _connect_transport(streamable_http_client(srv))
+        elif isinstance(srv, StdioServerParameters):
+            self._connect = _connect_transport(stdio_client(srv))
         else:
             self._connect = _connect_transport(srv)
 
@@ -946,5 +946,4 @@ class Client:
     @deprecated("The roots capability is deprecated as of 2026-07-28 (SEP-2577).", category=MCPDeprecationWarning)
     async def send_roots_list_changed(self) -> None:
         """Send a notification that the roots list has changed."""
-        # TODO(Marcelo): Currently, there is no way for the server to handle this. We should add support.
         await self.session.send_roots_list_changed()  # pyright: ignore[reportDeprecated]

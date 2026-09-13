@@ -4,10 +4,10 @@ import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from functools import reduce
+from functools import cache, reduce
 from operator import or_
-from types import TracebackType
-from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol, TypeAlias, cast, overload
+from types import TracebackType, UnionType
+from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Protocol, TypeAlias, cast, get_args, overload
 
 import anyio
 import anyio.abc
@@ -30,6 +30,7 @@ from mcp_types import (
 from mcp_types import methods as _methods
 from mcp_types.version import (
     HANDSHAKE_PROTOCOL_VERSIONS,
+    KNOWN_PROTOCOL_VERSIONS,
     LATEST_HANDSHAKE_VERSION,
     LATEST_MODERN_VERSION,
     MODERN_PROTOCOL_VERSIONS,
@@ -75,6 +76,38 @@ def _clamp_inbound_ttl(raw: dict[str, Any]) -> None:
     ttl = raw.get("ttlMs")
     if isinstance(ttl, int | float) and not isinstance(ttl, bool) and ttl < 0:
         raw["ttlMs"] = 0
+
+
+@cache
+def _wire_fields(target: type[BaseModel] | UnionType) -> frozenset[str]:
+    """Top-level wire keys `target` declares (its members', for a union)."""
+    members: tuple[Any, ...] = get_args(target) if isinstance(target, UnionType) else (target,)
+    models = [m for m in members if isinstance(m, type) and issubclass(m, BaseModel)]
+    fields: set[str] = set()
+    for model in models:
+        fields.update(field.alias or name for name, field in model.model_fields.items())
+    return frozenset(fields)
+
+
+@cache
+def _later_revision_fields(method: str, version: str) -> frozenset[str]:
+    """Result keys a revision newer than `version` declares for `method` but `version` doesn't.
+
+    The version-free result types carry every revision's fields, so such a key
+    (e.g. 2026-07-28 `ttlMs`/`cacheScope` on a pre-2026 session) is outside the
+    negotiated contract yet would still parse into the model and trip that later
+    revision's constraints. Empty at the newest known revision.
+    """
+    current = _methods.SERVER_RESULTS.get((method, version))
+    if current is None or version not in KNOWN_PROTOCOL_VERSIONS:
+        return frozenset()
+    newer = KNOWN_PROTOCOL_VERSIONS[KNOWN_PROTOCOL_VERSIONS.index(version) + 1 :]
+    later: set[str] = set()
+    for revision in newer:
+        row = _methods.SERVER_RESULTS.get((method, revision))
+        if row is not None:
+            later |= _wire_fields(row)
+    return frozenset(later) - _wire_fields(current)
 
 
 def _same_schema(a: dict[str, Any] | None, b: dict[str, Any] | None) -> bool:
@@ -558,6 +591,11 @@ class ClientSession:
             _methods.validate_server_result(method, version, raw)
         except KeyError:
             pass
+        # Drop a later revision's fields (e.g. 2026-07-28 cache hints on a pre-2026
+        # session): they are outside the negotiated contract, and the version-free
+        # result type would otherwise apply that revision's constraints to them.
+        if not (foreign := _later_revision_fields(method, version)).isdisjoint(raw):
+            raw = {key: value for key, value in raw.items() if key not in foreign}
         if isinstance(result_type, TypeAdapter):
             return result_type.validate_python(raw, by_name=False)
         return result_type.model_validate(raw, by_name=False)
@@ -1081,7 +1119,8 @@ class ClientSession:
         """Revalidate a `CallToolResult` against the tool's declared output schema.
 
         Raises:
-            RuntimeError: Structured content is missing or does not conform to the schema.
+            RuntimeError: Structured content is missing or does not conform to the schema, or the
+                schema is invalid or has a `$ref` that does not resolve within the schema document.
         """
         if name not in self._tool_output_schemas:
             # refresh output schema cache
@@ -1095,6 +1134,7 @@ class ClientSession:
 
         if output_schema is not None:
             from jsonschema import exceptions as jsonschema_exceptions
+            from referencing.exceptions import Unresolvable
 
             if result.structured_content is None:
                 raise RuntimeError(f"Tool {name} has an output schema but did not return structured content")
@@ -1102,10 +1142,14 @@ class ClientSession:
             # `best_match` picks the same error the previous `jsonschema.validate()` call raised,
             # so the message a caller sees is unchanged. It is untyped upstream.
             errors = validator.iter_errors(result.structured_content)
-            error = cast(
-                "Exception | None",
-                jsonschema_exceptions.best_match(errors),  # pyright: ignore[reportUnknownMemberType]
-            )
+            try:
+                error = cast(
+                    "Exception | None",
+                    jsonschema_exceptions.best_match(errors),  # pyright: ignore[reportUnknownMemberType]
+                )
+            except Unresolvable as e:
+                # A `$ref` did not resolve within the schema document.
+                raise RuntimeError(f"Invalid schema for tool {name}: {e}") from e
             if error is not None:
                 raise RuntimeError(f"Invalid structured content returned by tool {name}: {error}") from error
 
@@ -1123,6 +1167,7 @@ class ClientSession:
         """
         from jsonschema import SchemaError
         from jsonschema.validators import validator_for
+        from referencing import Registry
 
         if (validator := self._tool_output_validators.get(name)) is not None:
             return validator
@@ -1132,9 +1177,8 @@ class ClientSession:
             validator_cls.check_schema(output_schema)
         except SchemaError as e:
             raise RuntimeError(f"Invalid schema for tool {name}: {e}")
-        # jsonschema ships no `py.typed`, so pyright reads typeshed's stub, which declares
-        # `registry` as required (concrete validators default it); cast to a schema-only ctor.
-        validator = cast("Callable[[dict[str, Any]], Validator]", validator_cls)(output_schema)
+        # An explicit empty registry: `$ref`s resolve within the schema document and the bundled metaschemas.
+        validator = validator_cls(output_schema, registry=Registry())
         self._tool_output_validators[name] = validator
         return validator
 
